@@ -42,6 +42,7 @@ class TrainingModel(nn.Module):
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted.cpu() == labels).sum().item()
+          
           print(f'Accuracy of the network on the 10000 test images: {100 * correct // total} %')
       #   state_dict = torch.load('...')
       #   net.load_state_dict(state_dict['model'])
@@ -55,17 +56,17 @@ class TrainingModel(nn.Module):
         # zero the parameter gradients
         optimizer.zero_grad()
 
-        with torch.autograd.set_detect_anomaly(True):
+        # with torch.autograd.set_detect_anomaly(True):
         # forward + backward + optimize
         # with autograd.detect_anomaly():
-          outputs = self.forward(inputs.to('cuda'))
-          loss = criterion(outputs, (0.8 * F.one_hot(labels, num_classes=10) + 0.1).to('cuda', dtype=torch.float32))
+        outputs = self.forward(inputs.to('cuda'))
+        loss = criterion(outputs, (0.8 * F.one_hot(labels, num_classes=10) + 0.1).to('cuda', dtype=torch.float32))
         # loss = criterion(outputs.to('cuda'), labels.to('cuda'))
         
         # print(loss)
-          loss.backward()
-          nn.utils.clip_grad_value_(self.parameters(), 0.05)
-          optimizer.step()
+        loss.backward()
+        nn.utils.clip_grad_value_(self.parameters(), 0.05)
+        optimizer.step()
         # print statistics
         running_loss += loss.item()
         if i % pe == pe - 1:    # print every 2000 mini-batches

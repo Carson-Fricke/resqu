@@ -2,31 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from ..nn_modules.activations import ReSqU
-from ..nn_modules.layers import MultiActivationDense
-from ..nn_modules.layers import InstanceUniform
+from ..nn_modules.layers import MultiActivationDense, SplitReSqULinear
+from ..nn_modules.layers import BatchBound
 from ..nn_modules.layers import SplitReSqUConv
 from ..nn_modules.trainingmodel import TrainingModel
 
-
-class DenseBlock(nn.Module):
-  def __init__(self, in_channels=16, relu_channels=14, resqu_channels=2, n=3):
-    super(ResBlock, self).__init__()    
-    self.layers = [SplitReSqUConv(in_channels, relu_channels=relu_channels, resqu_channels=resqu_channels, kernel_size=3, padding=1,).to('cuda') for _ in range(n)]
-  
-  def forward(self, x):
-    lp = [x] + [None for l in self.layers]
-    a = x
-    for i, l in enumerate(self.layers):
-      a = F.leaky_relu(a + l(a))
-      # lp[i+1] = l(lp[i])
-    # o = x + lp[-1]
-    return a
 
 class ResBlock(nn.Module):
   
   def __init__(self, in_channels=16, relu_channels=14, resqu_channels=2, n=1):
     super(ResBlock, self).__init__()    
-    self.layers = [SplitReSqUConv(in_channels, relu_channels=relu_channels, resqu_channels=resqu_channels, kernel_size=3, padding=1,).to('cuda') for _ in range(n)]
+    self.layers = nn.ModuleList([SplitReSqUConv(in_channels, relu_channels=relu_channels, resqu_channels=resqu_channels, kernel_size=3, padding=1,).to('cuda') for _ in range(n)])
   
   def forward(self, x):
     lp = [x] + [None for l in self.layers]
@@ -36,6 +22,22 @@ class ResBlock(nn.Module):
     o = x + lp[-1]
     return F.leaky_relu(o)
     
+
+class DenseBlock(nn.Module):
+  def __init__(self, in_channels=28, relu_channels=24, resqu_channels=4, n=3):
+    super(DenseBlock, self).__init__()    
+    self.layers = nn.ModuleList([SplitReSqUConv(in_channels, relu_channels=relu_channels, resqu_channels=resqu_channels, kernel_size=3, padding=1,).to('cuda') for _ in range(n)])
+
+  def forward(self, x):
+    lp = [x] + [None for l in self.layers]
+    a = x
+    for i, l in enumerate(self.layers):
+      a = a + l(F.leaky_relu(a))
+      # lp[i+1] = l(lp[i])
+    # o = x + lp[-1]
+    return F.leaky_relu(a)
+
+
 class SquishBlock(nn.Module):
   def __init__(self, in_channels=16, relu_channels=30, resqu_channels=2, kernel=5, padding=0, ):
     super(SquishBlock, self).__init__()
@@ -52,16 +54,16 @@ class SquishBlock(nn.Module):
 class TestNet(TrainingModel):
   def __init__(self):
     super().__init__()
-    self.conv1 = nn.Conv2d(3, 16, 3, padding=1, bias=False)
-    nn.init.xavier_uniform_(self.conv1.weight, 0.5)
+    self.conv1 = nn.Conv2d(3, 28, 3, padding=1, bias=False)
+    nn.init.xavier_uniform_(self.conv1.weight, 1)
     self.norm1 = nn.Identity() #InstanceUniform()
 
-    self.res1 = ResBlock(n=6)
+    self.res1 = DenseBlock(n=12)
     # self.res2 = ResBlock()
     # self.res3 = ResBlock()
     # self.res4 = ResBlock()
 
-    self.squish1 = SquishBlock(kernel=7)
+    # self.squish1 = SquishBlock(kernel=11)
 
     # self.res21 = ResBlock(in_channels=32, activations=[(nn.ReLU(), 29), (ReSqU(), 2)])
     # self.res22 = ResBlock(in_channels=32, activations=[(nn.ReLU(), 29), (ReSqU(), 2)])
@@ -76,10 +78,10 @@ class TestNet(TrainingModel):
     # self.res34 = ResBlock(in_channels=128, activations=[(nn.ReLU(), 124), (ReSqU(), 3)])
 
     # self.squish3 = SquishBlock(in_channels=128, kernel=9, activations=[(nn.ReLU(), 251), (ReSqU(), 4)])
-
-    self.pool = nn.AvgPool2d(8,8)
-    self.fc1a = MultiActivationDense(288, [(nn.ReLU(), 48), (ReSqU(), 2)])
-    self.fco = nn.Linear(50, 10)
+    self.channel_squish = nn.Conv2d(28, 4, 1, bias=True)
+    self.pool = nn.AdaptiveAvgPool2d((16, 16))
+    # self.fc1a = SplitReSqULinear(256, 20, 6)
+    self.fco = nn.Linear(1024, 10)
     
 
   def forward(self, x):
@@ -98,7 +100,8 @@ class TestNet(TrainingModel):
     # x = self.res4(x)
     # print('r4, max', torch.max(x), torch.argmax(x))
         
-    x = self.squish1(x)
+    # x = self.squish1(x)
+    # print(x.shape)
     # print('squish: max', torch.max(x), torch.argmax(x))
 
     # x = self.res21(x)
@@ -114,11 +117,13 @@ class TestNet(TrainingModel):
     # x = self.res34(x)
 
     # x = self.squish3(x)
-
+    # print('pre pool', x.shape)
+    x = self.channel_squish(x)
     x = self.pool(x)
+    # print(x.shape)
     # print('poolo: max', torch.max(x), torch.argmax(x))
     x = torch.flatten(x, 1) # flatten all dimensions except batch
-    x = self.fc1a(x)
+    # x = self.fc1a(x)
     x = self.fco(x)
     # print('output: max', torch.max(x), torch.argmax(x))
     return F.log_softmax(x, dim=1)

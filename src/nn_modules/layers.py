@@ -81,6 +81,9 @@ class VarianceSplitConv(nn.Module):
     a = torch.cat((a, v), dim=1)
     return a
 
+
+
+
 class InteractionConv(nn.Module):
   def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False):
     super(InteractionConv, self).__init__()
@@ -95,8 +98,25 @@ class InteractionConv(nn.Module):
     v = F.conv2d(x2, torch.pow(self.convr.weight, 2), self.convr.bias, self.convr.stride, padding=self.convr.padding, dilation=self.convr.dilation, groups=self.convr.groups)
     return F.relu(z-v)
 
+class SplitReSqULinear(nn.Module):
+  def __init__(self, in_features, relu_features, resqu_features):
+    super(SplitReSqULinear, self).__init__()
+    self.relu_linear = nn.Linear(in_features, relu_features)
+    self.resqu_linear = nn.Linear(in_features, resqu_features, bias=False)
+
+  def forward(self, x):
+    z = torch.pow(self.resqu_linear(x), 2)
+    x2 = torch.pow(x, 2)
+    v = F.linear(x2, torch.pow(self.resqu_linear.weight, 2))
+    s = z - v
+    oc = torch.cat((self.relu_linear(x), s), dim=1)
+    return F.relu(oc)
+
+
+
+
 class SplitReSqUConv(nn.Module):
-  def __init__(self, in_channels, relu_channels, resqu_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False):
+  def __init__(self, in_channels, relu_channels, resqu_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False, norm=True):
     super(SplitReSqUConv, self).__init__()
     self.in_channels, self.resque_channels = in_channels, resqu_channels
     self.convr = nn.Conv2d(self.in_channels, self.resque_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=bias)
@@ -104,7 +124,7 @@ class SplitReSqUConv(nn.Module):
     self.relu_channels = relu_channels
     self.conv = nn.Conv2d(self.in_channels, self.relu_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=True)
     
-    #self.norm = nn.InstanceNorm2d(self.out_channels) if norm else nn.Identity()
+    self.norm = ChannelBound() if norm else nn.Identity()
     nn.init.xavier_uniform_(self.convr.weight, 0.1)
 
   def forward(self, x):
@@ -113,24 +133,36 @@ class SplitReSqUConv(nn.Module):
       x2 = torch.pow(x, 2)
       v = F.conv2d(x2, torch.pow(self.convr.weight, 2), self.convr.bias, self.convr.stride, padding=self.convr.padding, dilation=self.convr.dilation, groups=self.convr.groups)
       s = z - v
-      oc = torch.cat((self.conv(x), s), dim=1)
+      # oc = torch.cat((self.norm(self.conv(x)), self.norm(s)), dim=1)
+      oc = self.norm(torch.cat((self.conv(x), s), dim=1))
       o = F.relu(oc, inplace=False)
       return o
     else:
       return F.relu(self.conv(x))
 
 # normalizes values into a range of -1 and 1, with optional polarization away from 0
-class InstanceUniform(nn.Module):
+class BatchBound(nn.Module):
   def __init__(self, polarization=0):
-    super(InstanceUniform, self).__init__()
+    super(BatchBound, self).__init__()
     # self.max = None
     self.polarization = polarization
 
   def forward(self, x):
     tx = torch.pow(x, 1 / (2 * self.polarization + 1))
     maxi = torch.amax(torch.abs(tx), dim=0)
+    # print(maxi.shape)
     return tx / maxi
 
+class ChannelBound(nn.Module):
+  def __init__(self, polarization=0):
+    super(ChannelBound, self).__init__()
+    # self.max = None
+    self.polarization = polarization
 
+  def forward(self, x):
+    tx = torch.pow(x, 1 / (2 * self.polarization + 1))
+    maxi = torch.amax(torch.abs(tx), dim=(-1, -2))
+    maxi = maxi.view(*maxi.shape, 1, 1).expand_as(x)
+    return tx / maxi
 
   

@@ -1,7 +1,7 @@
 import torch
 import torchvision
 import torchvision.transforms.v2 as transforms
-from src.models.cifarresnet40 import *
+from src.models.cifardensenet65k import *
 import torch.optim as optim
 import torch.nn as nn
 from torch import autograd
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     transforms.Normalize(*stats, inplace=True)
   ])
 
-  batch_size = 110
+  batch_size = 32
 
   trainset50k = torchvision.datasets.CIFAR10(root='./data', train=True,
                                           download=True, transform=transform_train)
@@ -56,20 +56,19 @@ if __name__ == '__main__':
 
   classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-  
-  
-  
+
+
   net = TestNet().to('cuda')
   # criterion = nn.MSELoss()
   criterion = nn.KLDivLoss(reduction='batchmean')
-  optimizer = optim.SGD(net.parameters(), lr=0.001, weight_decay=0.00002)
+  optimizer = optim.SGD(net.parameters(), lr=0.001, weight_decay=0.000015)
   # optimizer = optim.AdamW(net.parameters())
   
   # torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.5, epochs=30, steps_per_epoch=500, div_factor=25, final_div_factor=100, three_phase=True)
-  torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=300, steps_per_epoch=500, pct_start=0.10, div_factor=25, final_div_factor=1000, three_phase=True)
+  torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=500, steps_per_epoch=500, pct_start=0.05, div_factor=25, final_div_factor=1000, three_phase=True)
   print('Parameter Count: ', sum(p.numel() for p in net.parameters()))
   # torch.optim.lr_scheduler.MultiStepLR()
 
   torch.set_printoptions(precision=4, sci_mode=False)
   
-  net.fit(trainloader, testloader, optimizer, criterion, epochs=300)
+  net.fit(trainloader, testloader, optimizer, criterion, epochs=500, save_options=(5, 'model.th'))
