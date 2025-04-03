@@ -222,8 +222,6 @@ class SingleVarFunctions(Dataset):
         axis[px, py].plot(x,y)
     plt.show()
 
-
-
   def __len__(self):
     return len(self.funcs)
 
