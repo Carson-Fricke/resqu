@@ -100,3 +100,6 @@ def resnet17(resqu_rate=0, in_planes=3, num_classes=10, force_bound=False):
 
 def resnet20(resqu_rate=0, in_planes=3, num_classes=10, force_bound=False):
     return ResNet(BasicBlock, [3, 3, 3], resqu_rate=resqu_rate, in_planes=in_planes, num_classes=num_classes, force_bound=force_bound)
+
+def resnet44(resqu_rate=0, in_planes=3, num_classes=10, force_bound=False):
+    return ResNet(BasicBlock, [7, 7, 7], resqu_rate=resqu_rate, in_planes=in_planes, num_classes=num_classes, force_bound=force_bound)

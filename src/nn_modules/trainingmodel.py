@@ -27,7 +27,7 @@ class TrainingModel(nn.Module):
   def forward(self, x):
     raise NotImplementedError()
   
-  def fit(self, training_loader, test_loader, optimizer, criterion, epochs=150, loader_transform=lambda x: x, print_options=(True, 1, 3), save_options=(None, 'save')):
+  def fit(self, training_loader, test_loader, optimizer, criterion, epochs=150, loader_transform=lambda x: x, print_options=(True, 1, 1), save_options=(None, 'save')):
 
         
     np = print_options[1]
@@ -46,33 +46,7 @@ class TrainingModel(nn.Module):
         if (save_options[0] and epoch % save_options[0] == 0):
           torch.save(self.state_dict(), f'{save_options[1]}{start_time}.th')
 
-        if (print_options[0] and epoch % print_options[2] == 0):
-          test_loss = 0.0
-          correct = 0
-          total = 0
-          with torch.no_grad():
-            for data in test_loader:
-              x, y = loader_transform(data)
-              # calculate outputs by running images through the network
-              outputs = self.forward(x.to('cuda'))
-              
-              test_loss += criterion(outputs, y.to('cuda')).item()
-              # the class with the highest energy is what we choose as prediction
-              if x.shape != y.shape:
-                _, predicted = torch.max(outputs, 1)
-                correct += (predicted.cpu() == y).sum().item()
-              total += y.size(0)
-
-            time_now = int(round(datetime.now(timezone.utc).timestamp()*1000)) - start_time
-            measurement = pd.DataFrame([[epoch, 0, time_now, None, test_loss / total, correct / total]], columns=tsc)
-            training_stats = pd.concat([training_stats, measurement], ignore_index=True)
-
-            if correct > best_correct:
-              best_correct = correct
-              torch.save(self.state_dict(), f'{save_options[1]}{start_time}.th')
-
-            print(f'Accuracy of the network on the {total} validation images: {100 * correct // total} %')
-
+        #  train the model
         running_loss = 0.0
         for i, data in enumerate(training_loader, 0):
           # get the inputs; data is a list of [inputs, labels]
@@ -97,6 +71,36 @@ class TrainingModel(nn.Module):
           running_loss += loss.item()
           if i % pe == pe - 1:
             print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / pe:.5f}')
+
+        # evaluate with test data
+        if (print_options[0] and epoch % print_options[2] == 0):
+          test_loss = 0.0
+          correct = 0
+          total = 0
+          with torch.no_grad():
+            for data in test_loader:
+              x, y = loader_transform(data)
+              # calculate outputs by running images through the network
+              outputs = self.forward(x.to('cuda'))
+              
+              test_loss += criterion(outputs, y.to('cuda')).item()
+              # the class with the highest energy is what we choose as prediction
+              if x.shape != y.shape:
+                _, predicted = torch.max(outputs, 1)
+                correct += (predicted.cpu() == y).sum().item()
+              total += y.size(0)
+
+            time_now = int(round(datetime.now(timezone.utc).timestamp()*1000)) - start_time
+            measurement = pd.DataFrame([[epoch, 0, time_now, running_loss / pe, y.size(0) * test_loss / total, correct / total]], columns=tsc)
+            training_stats = pd.concat([training_stats, measurement], ignore_index=True)
+
+            if correct > best_correct:
+              best_correct = correct
+              torch.save(self.state_dict(), f'{save_options[1]}{start_time}.th')
+
+            print(f'Accuracy of the network on the {total} validation images: {100 * correct // total} %')
+
+        
     finally:
       training_stats.to_csv(f'{save_options[1]}{str(start_time)[:10]}_training_stats.csv')
               

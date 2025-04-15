@@ -5,7 +5,7 @@ import torch.optim as optim
 # import torch_optimizer as optim
 import torch.nn as nn
 from src.models.mnist_autoencoder import MnistAutoEncoder
-from src.models.resnet20 import *
+from src.models.resnet import *
 
 
 
