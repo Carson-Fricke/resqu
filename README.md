@@ -1,15 +1,18 @@
 Research Paper!
 
 
-N = 5
+N = 3
 
 some tests on small resnet/densenet with varying percentage of relu to resqu
 
 
-CIFAR10 and CIFAR 100, MNIST and Fashion MNIST
+CIFAR10 and CIFAR 100
 
 Resnet20
+Resnet44
 
+MNIST, CIFAR10
+linear layer autoencoder
 
 
 Synthetic dataset X^2

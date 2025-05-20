@@ -4,7 +4,7 @@ import torchvision.transforms.v2 as transforms
 import torch.optim as optim
 # import torch_optimizer as optim
 import torch.nn as nn
-from src.models.mnist_autoencoder import MnistAutoEncoder
+from src.models.linear_autoencoder import MnistAutoEncoder
 from src.models.resnet import *
 
 
@@ -44,8 +44,6 @@ if __name__ == '__main__':
 
   trainset, testset = torch.utils.data.random_split(fullset, [65000, 5000])
 
-  
-
   trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=False)
 
   testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=4)
@@ -60,10 +58,10 @@ if __name__ == '__main__':
   # AdamW scheduler
   # torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.5, epochs=30, steps_per_epoch=550, pct_start=0.6, div_factor=5000, final_div_factor=500, three_phase=True)
   # SGD scheduler
-  torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=500, steps_per_epoch=550, pct_start=0.05, div_factor=25, final_div_factor=300, three_phase=True)
+  torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=100, steps_per_epoch=550, pct_start=0.05, div_factor=25, final_div_factor=300, three_phase=True)
   print('Parameter Count: ', sum(p.numel() for p in net.parameters()))
   # torch.optim.lr_scheduler.MultiStepLR()
 
   torch.set_printoptions(precision=6, sci_mode=False)
   
-  net.fit(trainloader, testloader, optimizer, criterion, epochs=500, loader_transform=lambda x: (x[0].squeeze(), x[0].squeeze()), save_options=(5, 'MNIST_autoencoder'))
+  net.fit(trainloader, testloader, optimizer, criterion, epochs=100, loader_transform=lambda x: (x[0].squeeze(), x[0].squeeze()), save_options=(5, 'MNIST_autoencoder'))

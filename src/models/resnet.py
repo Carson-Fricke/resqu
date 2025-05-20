@@ -9,6 +9,9 @@ from ..nn_modules.trainingmodel import TrainingModel
 from math import floor, ceil
 
 
+split_layers = []
+
+
 def _weights_init(m):
   """
       Initialization of CNN weights
@@ -37,10 +40,10 @@ class BasicBlock(nn.Module):
     use_bb = False# (not planes[1] == 0) or force_bound
 
     super(BasicBlock, self).__init__()
-    self.conv1 = SplitReSqUConv(in_planes, *planes, kernel_size=3, stride=stride, padding=1)
+    self.conv1 = SplitReSqUConv(in_planes, *planes, kernel_size=3, stride=stride, padding=1, bound_resqu=False, norm=False, secondary_bias=True)
     self.bn1 = nn.BatchNorm2d(sum(planes))
     self.bb1 = BatchBound() if use_bb else nn.Identity()
-    self.conv2 = SplitReSqUConv(sum(planes), *planes, kernel_size=3, stride=1, padding=1)
+    self.conv2 = SplitReSqUConv(sum(planes), *planes, kernel_size=3, stride=1, padding=1, bound_resqu=False, norm=False, secondary_bias=True)
     self.bn2 = nn.BatchNorm2d(sum(planes))
     self.bb2 = BatchBound() if use_bb else nn.Identity()
     self.shortcut = nn.Identity()
@@ -49,18 +52,20 @@ class BasicBlock(nn.Module):
         lambda x:
           F.pad(x[:, :, ::2, ::2], (0, 0, 0, 0, sum(planes)//4, sum(planes)//4), "constant", 0)
       )
+    split_layers.append([self.conv1, self.conv2])
 
   def forward(self, x):
-    out = F.relu(self.bb1(self.bn1(self.conv1(x))))
+    out = self.bb1(self.bn1(self.conv1(x)))
     out = self.bb2(self.bn2(self.conv2(out)))
     s = self.shortcut(x)
     out += s
-    out = F.relu(out)
+    # out = F.relu(out)
     return out
     
 class ResNet(TrainingModel):
   
   def __init__(self, block, num_blocks, resqu_rate=0, in_planes=3, num_classes=10, force_bound=False):
+    
     super(ResNet, self).__init__()
     self.intermediate_planes = 16
     self.conv1 = nn.Conv2d(in_planes, 16, kernel_size=3, stride=1, padding=1, bias=False)
@@ -94,6 +99,10 @@ class ResNet(TrainingModel):
       self.linear = nn.Linear(out.size(-1), self.num_classes).to(out.device)
     out = self.linear(out)
     return F.log_softmax(out, dim=1)
+
+  def resqu_wb_norm(self):
+      return tuple(list(item) for item in zip(*[layer.resqu_wb_norm() for layer in split_layers]))
+    
 
 def resnet17(resqu_rate=0, in_planes=3, num_classes=10, force_bound=False):
     return ResNet(BasicBlock, [2, 2, 2], resqu_rate=resqu_rate, in_planes=in_planes, num_classes=num_classes, force_bound=force_bound)

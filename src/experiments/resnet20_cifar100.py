@@ -4,6 +4,7 @@ import torchvision.transforms.v2 as transforms
 import torch.optim as optim
 from src.models.resnet import resnet20
 from src.nn_modules.trainingmodel import FixedCrossEntropy
+import os
 
 def run_experiment(seed=777, n=5):
   torch.manual_seed(seed)
@@ -39,11 +40,14 @@ def run_experiment(seed=777, n=5):
   trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=False)
   testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=4)
 
-  for rate in [0, 1/64, 3/32, 3/16, 1/2]:
-    for run in range(n):
-      net = resnet20(resqu_rate=3/32, num_classes=100).to('cuda')
+  clipping_strategy = lambda params, epochs: torch.nn.utils.clip_grad_norm_(params, 3) #if epochs < 50 else torch.nn.utils.clip_grad_value_(params, 0.3)
+
+  for run in range(n):
+    for rate in [0, 3/64, 3/32, 3/16, 1/2]:
+      os.makedirs(f'resnet20-CIFAR100/rate{rate:.3f}', exist_ok=True)
+      net = resnet20(resqu_rate=rate, num_classes=100).to('cuda')
       criterion = FixedCrossEntropy(reduction='batchmean')
       optimizer = optim.SGD(net.parameters(), momentum=0.9, weight_decay=0.000015)
-      torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=300, steps_per_epoch=138, pct_start=0.1, div_factor=25, final_div_factor=300, three_phase=True)
+      torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=200, steps_per_epoch=550, pct_start=0.1, div_factor=25, final_div_factor=300, three_phase=True)
       print('Parameter Count: ', sum(p.numel() for p in net.parameters()))
-      net.fit(trainloader, testloader, optimizer, criterion, epochs=300, save_options=(None, f'resnet20-CIFAR100-rr-{rate}-run-{run}'))
+      net.fit(trainloader, testloader, optimizer, criterion, epochs=200, grad_clipper=clipping_strategy, save_options=(None, f'./resnet20-CIFAR100/rate{rate:.3f}/resnet20-CIFAR100-rr-{rate:.3f}-run-{run}-'))

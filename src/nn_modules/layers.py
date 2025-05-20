@@ -100,13 +100,26 @@ from .activations import ReSqU
 #     return F.relu(z-v)
 
 class SplitReSqULinear(nn.Module):
-  def __init__(self, in_features, relu_features, resqu_features, bias=True, resqu_bias=True, norm=True, bound_resqu=True):
+  def __init__(self, in_features, relu_features, resqu_features, bias=True, resqu_bias=True, secondary_bias=False, norm=True, bound_resqu=True):
     super(SplitReSqULinear, self).__init__()
     self.relu_linear = nn.Linear(in_features, relu_features, bias=bias)
     self.resqu_linear = None
+    
+    
+    self.secondary_bias = 0
     if resqu_features != 0:
       self.resqu_linear = nn.Linear(in_features, resqu_features, bias=resqu_bias)
       nn.init.xavier_uniform_(self.resqu_linear.weight, 0.2)
+
+      if secondary_bias:
+        sb = torch.ones_like(self.resqu_linear.bias)
+        self.secondary_bias = nn.Parameter(sb)
+        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.resqu_linear.weight)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        nn.init.uniform_(self.secondary_bias, -bound, bound)
+
+    
+    
 
     self.norm1 = nn.BatchNorm1d(relu_features) if norm else nn.Identity()
     self.norm2 = nn.BatchNorm1d(resqu_features) if norm else nn.Identity()
@@ -117,23 +130,36 @@ class SplitReSqULinear(nn.Module):
       z = torch.pow(self.resqu_linear(x), 2)
       x2 = torch.pow(x, 2)
       v = F.linear(x2, torch.pow(self.resqu_linear.weight, 2), torch.pow(self.resqu_linear.bias, 2))
-      s = z - v
+      s = z - v + self.secondary_bias
       oc = torch.cat((self.norm1(self.relu_linear(x)), self.bound(self.norm2(s))), dim=1)
       return F.relu(oc)
     else:
       return F.relu(self.relu_linear(x))
 
+  def resqu_wb_norm(self):
+    if self.resqu_linear:
+      return torch.linalg.vector_norm(self.resqu_linear.weight).unsqueeze(0), torch.linalg.vector_norm(self.resqu_linear.bias).unsqueeze(0),
+    return torch.zeros(1), torch.zeros(1)
 
 
 
 class SplitReSqUConv(nn.Module):
-  def __init__(self, in_channels, relu_channels, resqu_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, resqu_bias=True, norm=True, bound_resqu=True):
+  def __init__(self, in_channels, relu_channels, resqu_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, resqu_bias=True, secondary_bias=False, norm=True, bound_resqu=True):
     super(SplitReSqUConv, self).__init__()
     self.in_channels, self.relu_channels, self.resque_channels = in_channels, relu_channels, resqu_channels
     self.convr = None
+    self.secondary_bias = 0
     if resqu_channels != 0:
       self.convr = nn.Conv2d(self.in_channels, self.resque_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=resqu_bias)
       nn.init.xavier_uniform_(self.convr.weight, 0.2)
+
+      if secondary_bias:
+        sb = torch.ones_like(self.convr.bias)
+        self.secondary_bias = nn.Parameter(sb)
+        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.convr.weight)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        nn.init.uniform_(self.secondary_bias, -bound, bound)
+
 
     self.conv = nn.Conv2d(self.in_channels, self.relu_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=bias)
     
@@ -146,16 +172,63 @@ class SplitReSqUConv(nn.Module):
       z = torch.pow(self.convr(x), 2)
       x2 = torch.pow(x, 2)
       v = F.conv2d(x2, torch.pow(self.convr.weight, 2), torch.pow(self.convr.bias, 2), self.convr.stride, padding=self.convr.padding, dilation=self.convr.dilation, groups=self.convr.groups)
-      s = z - v
+      # print(v.size(), self.convr.bias.size(), self.secondary_bias.size())
+      s = z - v + self.secondary_bias.unsqueeze(1).unsqueeze(1).expand_as(v)
       # oc = torch.cat((self.norm(self.conv(x)), self.norm(s)), dim=1)
       oc = torch.cat((self.norm1(self.conv(x)), self.bound(self.norm2(s))), dim=1)
-      o = F.relu(oc)
+      # o = F.relu(oc)
+      o = F.leaky_relu(oc, negative_slope=0.02)
       return o
     else:
-      return F.relu(self.conv(x))
+      return F.leaky_relu(self.conv(x), negative_slope=0.02)
     
   def resqu_wb_norm(self):
-    return torch.linalg.vector_norm(self.convr.weight), torch.linalg.vector_norm(self.convr.bias)
+    if self.convr:
+      return torch.linalg.vector_norm(self.convr.weight).unsqueeze(0), torch.linalg.vector_norm(self.convr.bias).unsqueeze(0)
+    return torch.zeros(1), torch.zeros(1)
+
+
+class SplitReSqUConvTranspose(nn.Module):
+  def __init__(self, in_channels, relu_channels, resqu_channels, kernel_size, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, resqu_bias=True, secondary_bias=False, norm=True, bound_resqu=True):
+    super(SplitReSqUConvTranspose, self).__init__()
+    self.in_channels, self.relu_channels, self.resque_channels = in_channels, relu_channels, resqu_channels
+    self.convr = None
+    self.secondary_bias = 0
+    if resqu_channels != 0:
+      self.convr = nn.ConvTranspose2d(self.in_channels, self.resque_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, dilation=dilation, groups=groups, bias=resqu_bias)
+      nn.init.xavier_uniform_(self.convr.weight, 0.2)
+
+      if secondary_bias:
+        sb = torch.ones_like(self.convr.bias)
+        self.secondary_bias = nn.Parameter(sb)
+        fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.convr.weight)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        nn.init.uniform_(self.secondary_bias, -bound, bound)
+
+    self.convt = nn.ConvTranspose2d(self.in_channels, self.relu_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding, dilation=dilation, groups=groups, bias=bias)
+    
+    self.norm1 = nn.BatchNorm2d(relu_channels) if norm else nn.Identity()
+    self.norm2 = nn.BatchNorm2d(resqu_channels) if norm else nn.Identity()
+    self.bound = BatchBound() if bound_resqu else nn.Identity()
+
+  def forward(self, x):
+    if self.convr:
+      z = torch.pow(self.convr(x), 2)
+      x2 = torch.pow(x, 2)
+      v = F.conv_transpose2d(x2, torch.pow(self.convr.weight, 2), torch.pow(self.convr.bias, 2), self.convr.stride, padding=self.convr.padding, output_padding=self.convr.output_padding, dilation=self.convr.dilation, groups=self.convr.groups)
+      s = z - v  + self.secondary_bias
+      # oc = torch.cat((self.norm(self.conv(x)), self.norm(s)), dim=1)
+      oc = torch.cat((self.norm1(self.convt(x)), self.bound(self.norm2(s))), dim=1)
+      # o = F.relu(oc)
+      o = F.leaky_relu(oc, negative_slope=0.02)
+      return o
+    else:
+      return F.leaky_relu(self.convt(x), negative_slope=0.02)
+    
+  def resqu_wb_norm(self):
+    if self.convr:
+      return torch.linalg.vector_norm(self.convr.weight).unsqueeze(0), torch.linalg.vector_norm(self.convr.bias).unsqueeze(0)
+    return torch.zeros(1), torch.zeros(1)
 
 
 

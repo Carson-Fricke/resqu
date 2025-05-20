@@ -1,4 +1,5 @@
 data/
+old_data/
 __pycache__/
 .csv
 *.th
