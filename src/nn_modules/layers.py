@@ -148,7 +148,7 @@ class SplitReSqUConv(nn.Module):
     super(SplitReSqUConv, self).__init__()
     self.in_channels, self.relu_channels, self.resque_channels = in_channels, relu_channels, resqu_channels
     self.convr = None
-    self.secondary_bias = 0
+    self.secondary_bias = nn.Parameter(torch.tensor([0]), requires_grad=False)
     if resqu_channels != 0:
       self.convr = nn.Conv2d(self.in_channels, self.resque_channels, kernel_size, stride=stride, padding=padding, dilation=dilation, groups=groups, bias=resqu_bias)
       nn.init.xavier_uniform_(self.convr.weight, 0.2)

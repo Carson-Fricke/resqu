@@ -101,7 +101,7 @@ class TrainingModel(nn.Module):
 
             time_now = int(round(datetime.now(timezone.utc).timestamp()*1000)) - start_time
             wb = self.resqu_wb_norm()
-            print(wb)
+            # print(wb)
             w_mean = float(torch.mean(torch.cat(wb[0])).cpu())
             b_mean = float(torch.mean(torch.cat(wb[1])).cpu())
             measurement = pd.DataFrame([[epoch, 0, time_now, epoch_loss / total_train, test_loss / total_test, correct / total_test, w_mean, b_mean]], columns=tsc)

@@ -42,7 +42,7 @@ def run_experiment(seed=777, n=3):
 
   trainloader = torch.utils.data.DataLoader(trainset60k, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=False)
   testloader = torch.utils.data.DataLoader(testset10k, batch_size=batch_size, shuffle=False, num_workers=4)
-  clipping_strategy = lambda params, epochs: torch.nn.utils.clip_grad_norm_(params, 4) if epochs < 30 else torch.nn.utils.clip_grad_value_(params, 0.5)
+  clipping_strategy = lambda params, epochs: torch.nn.utils.clip_grad_norm_(params, 4)
   for run in range(n):
     for rate in [0, 1/16, 1/8, 1/4, 1/2]:
       os.makedirs(f'conv-autoencoder-mnist/rate{rate:.3f}', exist_ok=True)
@@ -51,8 +51,8 @@ def run_experiment(seed=777, n=3):
       criterion = nn.MSELoss(reduction='sum')
       optimizer = optim.SGD(net.parameters(), momentum=0.9, weight_decay=0.000015)
 
-      torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 1365, 2, 0.0001)
-      # torch.optim.lr_scheduler.OneCycleLR(optimizer, 0.1, epochs=100, steps_per_epoch=430, pct_start=0.05, div_factor=25, final_div_factor=300, three_phase=True)
+      # torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 1365, 2, 0.0001)
+      torch.optim.lr_scheduler.OneCycleLR(optimizer, 2, epochs=100, steps_per_epoch=600, pct_start=0.1, div_factor=500, final_div_factor=300, three_phase=True)
       print('Parameter Count: ', sum(p.numel() for p in net.parameters()))
       
       torch.set_printoptions(precision=6, sci_mode=False)

@@ -31,4 +31,5 @@ class LinearAutoEncoder(TrainingModel):
     return F.sigmoid(out.view(-1, self.channels, *self.dims).squeeze())
   
   def resqu_wb_norm(self):
-    return self.encoder.resqu_wb_norm()
+    ew, eb = self.encoder.resqu_wb_norm()
+    return ([ew], [eb])
